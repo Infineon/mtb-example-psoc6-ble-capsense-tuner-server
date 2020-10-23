@@ -277,6 +277,13 @@ static void stack_event_handler(uint32_t event, void* eventParam)
         cy_stc_ble_gap_enhance_conn_complete_param_t *conn_param =\
                 (cy_stc_ble_gap_enhance_conn_complete_param_t *)eventParam;
 
+        /* Variable to store values to update PHY to 2M */
+        cy_stc_ble_set_phy_info_t phy_param;
+        phy_param.allPhyMask = CY_BLE_PHY_NO_PREF_MASK_NONE;
+        phy_param.bdHandle = appConnHandle.bdHandle;
+        phy_param.rxPhyMask = CY_BLE_PHY_MASK_LE_2M;
+        phy_param.txPhyMask = CY_BLE_PHY_MASK_LE_2M;
+
         printf("\n\rConnected to device: ");
         for(uint8_t i = (CY_BLE_BD_ADDR_SIZE); i > 0u; i--)
         {
@@ -293,6 +300,18 @@ static void stack_event_handler(uint32_t event, void* eventParam)
 
         /* Turn ON the user LED when ble connection is established */
         cyhal_gpio_write((cyhal_gpio_t)CYBSP_USER_LED1, CYBSP_LED_STATE_ON);
+
+        /* Function call to set PHY to 2M */
+        apiResult = Cy_BLE_SetPhy(&phy_param);
+        if(apiResult == CY_BLE_SUCCESS)
+        {
+            DEBUG_PRINTF("Set PHY to 2M successfull");
+            DEBUG_PRINTF("Request sent to switch PHY to 2M\r\n");
+        }
+        else
+        {
+            DEBUG_PRINTF("Set PHY to 2M API failure, errorcode = 0x%X", apiResult);
+        }
         break;
     }
 
@@ -302,26 +321,6 @@ static void stack_event_handler(uint32_t event, void* eventParam)
     case CY_BLE_EVT_DATA_LENGTH_CHANGE:
     {
         DEBUG_PRINTF("CY_BLE_EVT_DATA_LENGTH_CHANGE \r\n");
-        cy_stc_ble_set_phy_info_t phyParam;
-
-        /* Configure the BLE stack for 2Mbps data rate */
-        phyParam.bdHandle = appConnHandle.bdHandle;
-        phyParam.allPhyMask = CY_BLE_PHY_NO_PREF_MASK_NONE;
-        phyParam.phyOption = 0;
-        phyParam.rxPhyMask = CY_BLE_PHY_MASK_LE_2M;
-        phyParam.txPhyMask = CY_BLE_PHY_MASK_LE_2M;
-
-        apiResult = Cy_BLE_SetPhy(&phyParam);
-        if(apiResult != CY_BLE_SUCCESS)
-        {
-            DEBUG_PRINTF("Failed to set PHY..[bdHandle 0x%02X] : 0x%4x\r\n",\
-                    phyParam.bdHandle, apiResult);
-        }
-        else
-        {
-            DEBUG_PRINTF("Setting PHY.[bdHandle 0x%02X] \r\n",\
-                                                           phyParam.bdHandle);
-        }
         break;
     }
 
@@ -344,36 +343,11 @@ static void stack_event_handler(uint32_t event, void* eventParam)
         ble_notification_enabled = false;
 
         /* BLE disconnected - turn off LED */
-        cyhal_gpio_write((cyhal_gpio_t)CYBSP_USER_LED1,CYBSP_LED_STATE_OFF);
+        cyhal_gpio_write((cyhal_gpio_t)CYBSP_USER_LED1, CYBSP_LED_STATE_OFF);
 
         /* Device disconnected; restart advertisement */
         Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST,\
                                        CY_BLE_PERIPHERAL_CONFIGURATION_0_INDEX);
-        break;
-    }
-
-    /* This event is generated at the GAP Central and the peripheral end after
-     * connection parameter update is requested from the host to the controller
-     */
-    case CY_BLE_EVT_GAP_CONNECTION_UPDATE_COMPLETE:
-    {
-        DEBUG_PRINTF("CY_BLE_EVT_GAP_CONNECTION_UPDATE_COMPLETE \r\n");
-        break;
-    }
-
-    case CY_BLE_EVT_SET_PHY_COMPLETE:
-    {
-        DEBUG_PRINTF("Updating the Phy.....\r\n");
-        cy_stc_ble_events_param_generic_t * param =\
-                (cy_stc_ble_events_param_generic_t *) eventParam;
-        if(param->status == SUCCESS)
-        {
-            DEBUG_PRINTF("SET PHY updated to 2 Mbps\r\n");
-        }
-        else
-        {
-            DEBUG_PRINTF("SET PHY Could not update to 2 Mbps\r\n");
-        }
         break;
     }
 
@@ -466,6 +440,8 @@ static void stack_event_handler(uint32_t event, void* eventParam)
         {
             /* Write Response to GATT Client in response to Write request */
             Cy_BLE_GATTS_WriteRsp(write_req_param->connHandle);
+
+            Cy_BLE_GATTS_WriteAttributeValuePeer(&appConnHandle, &(write_req_param->handleValPair));
 
             ble_notification_enabled = attr_param.handleValuePair.value.val[0];
             notificationPacket.connHandle = appConnHandle;
