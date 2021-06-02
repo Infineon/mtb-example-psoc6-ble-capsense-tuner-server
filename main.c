@@ -7,23 +7,24 @@
 * Related Document: See Readme.md
 *
 *
-********************************************************************************
-* Copyright (2020), Cypress Semiconductor Corporation. All rights reserved.
-********************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
+*******************************************************************************
+* Copyright 2020-2021, Cypress Semiconductor Corporation (an Infineon company) or
+* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
+* This software, including source code, documentation and related
+* materials ("Software") is owned by Cypress Semiconductor Corporation
+* or one of its affiliates ("Cypress") and is protected by and subject to
+* worldwide patent protection (United States and foreign),
+* United States copyright laws and international treaty provisions.
+* Therefore, you may use this Software only as provided in the license
+* agreement accompanying the software package from which you
+* obtained this Software ("EULA").
 * If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
+* non-transferable license to copy, modify, and compile the Software
+* source code solely for use in connection with Cypress's
+* integrated circuit products.  Any reproduction, modification, translation,
+* compilation, or representation of this Software except as specified
+* above is prohibited without the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -34,9 +35,9 @@
 * not authorize its products for use in any products where a malfunction or
 * failure of the Cypress product may reasonably be expected to result in
 * significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
+* including Cypress's product in a High Risk Product, the manufacturer
+* of such system or application assumes all risk of such use and in doing
+* so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 #include "cyhal.h"
 #include "cybsp.h"
@@ -50,7 +51,6 @@
 * Macros
 *******************************************************************************/
 #define CAPSENSE_INTR_PRIORITY  (7u)
-#define CY_ASSERT_FAILED        (0u)
 
 
 /*******************************************************************************
@@ -86,10 +86,7 @@ int main(void)
     result = cybsp_init() ;
 
     /* Board init failed. Stop program execution */
-    if (result != CY_RSLT_SUCCESS)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
 
     /* Initialize retarget-io to use the debug UART port */
     result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,\
@@ -101,10 +98,7 @@ int main(void)
                                CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
 
     /* Init failed. Stop program execution */
-    if (result != CY_RSLT_SUCCESS)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
 
     /* Enable global interrupts */
     __enable_irq();
@@ -113,13 +107,14 @@ int main(void)
     status = initialize_capsense();
 
     /* Halt the CPU if CapSense initialization failed */
-    if(CYRET_SUCCESS != status)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
+    CY_ASSERT(status == CYRET_SUCCESS);
 
     /* Initialize BLESS block */
     ble_capsense_tuner_init();
+
+    /* To avoid compiler warning*/
+    (void) result;
+    (void) status;
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
@@ -169,23 +164,22 @@ int main(void)
 static cy_status initialize_capsense(void)
 {
     cy_status status = CYRET_SUCCESS;
-
-    /* CapSense interrupt configuration */
-    const cy_stc_sysint_t CapSense_ISR_cfg =
-    {
-            .intrSrc = CYBSP_CSD_IRQ,
-            .intrPriority = CAPSENSE_INTR_PRIORITY,
-    };
+    cy_rslt_t sysint_status = CY_RSLT_SUCCESS;
 
     /* Capture the CSD HW block and initialize it to the default state. */
     status = Cy_CapSense_Init(&cy_capsense_context);
 
      if(CYRET_SUCCESS == status)
      {
-         /* Initialize CapSense interrupt */
-         Cy_SysInt_Init(&CapSense_ISR_cfg, capsense_isr);
-         NVIC_ClearPendingIRQ(CapSense_ISR_cfg.intrSrc);
-         NVIC_EnableIRQ(CapSense_ISR_cfg.intrSrc);
+         /* Initialize and enable CapSense interrupt */
+         sysint_status = cyhal_system_set_isr(CYBSP_CSD_IRQ, CYBSP_CSD_IRQ,
+                 CAPSENSE_INTR_PRIORITY, &capsense_isr);
+
+         NVIC_ClearPendingIRQ(CYBSP_CSD_IRQ);
+         NVIC_EnableIRQ(CYBSP_CSD_IRQ);
+
+         /* Halt CPU if CapSense interrupt initialization fails */
+         CY_ASSERT(sysint_status == CY_RSLT_SUCCESS);
 
          /* Initialize the CapSense firmware modules. */
          status = Cy_CapSense_Enable(&cy_capsense_context);
@@ -193,6 +187,9 @@ static cy_status initialize_capsense(void)
 
     /* Register tuner communication callback */
     cy_capsense_context.ptrCommonContext->ptrTunerSendCallback = tuner_send_callback;
+
+    /* To avoid compiler warning*/
+    (void) sysint_status;
 
     return status;
 }
